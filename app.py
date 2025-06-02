@@ -1,96 +1,93 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Data Sage Pro+", layout="wide")
-st.title("📊 Data Sage Pro+")
-st.write("Upload your CSV for clean analytics, charts, and insights!")
+# App config
+st.set_page_config(page_title="Data Sage Enhanced", layout="wide")
+st.title("🧙 Data Sage: Data Analysis Assistant")
 
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+# Upload
+uploaded_file = st.file_uploader("Upload your Excel or CSV file", type=["csv", "xlsx"])
+if uploaded_file is not None:
+    # Read file
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.subheader("🔍 Data Preview")
+    st.subheader("📄 Raw Data Preview")
     st.dataframe(df.head())
 
-    # Exclude unique ID-like columns from analysis
-    nunique_threshold = 0.9 * len(df)
-    non_id_columns = [col for col in df.columns if df[col].nunique() < nunique_threshold]
+    # Identify numeric & categorical columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
 
-    st.subheader("🧮 Basic Statistics (excluding unique IDs)")
-    st.dataframe(df[non_id_columns].describe(include='all'))
+    # Remove typical unique ID columns from categorical analysis
+    cat_cols_cleaned = [c for c in cat_cols if not c.lower() in ['id', 'unique_id']]
 
-    st.subheader("📊 Correlation Heatmap (Numerical Columns)")
-    num_cols = df[non_id_columns].select_dtypes(include=['float64', 'int64']).columns
-    if len(num_cols) > 1:
-        corr = df[num_cols].corr()
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
-        st.pyplot(fig)
-        st.write("💡 **Insight**: Strong correlations (>|0.7|) may indicate potential linear relationships or multicollinearity.")
-    else:
-        st.write("Not enough numerical columns for correlation heatmap.")
+    # Basic stats
+    st.subheader("📊 Basic Summary Statistics")
+    st.write(df.describe(include='all').T)
 
-    st.subheader("📊 Frequency Chart")
-    cat_cols = [col for col in non_id_columns if df[col].dtype == 'object']
-    if cat_cols:
-        cat_col = st.selectbox("Select a categorical column for frequency chart:", cat_cols)
-        top_n = st.slider("Top N categories", 1, 20, 10)
-        freq = df[cat_col].value_counts().head(top_n)
+    # Frequency charts for categorical columns
+    st.subheader("🔎 Frequency Charts for Categorical Columns")
+    for col in cat_cols_cleaned:
         fig, ax = plt.subplots()
-        sns.barplot(x=freq.index, y=freq.values, ax=ax)
-        ax.set_title(f"Top {top_n} most frequent {cat_col} values")
-        ax.set_ylabel("Frequency")
+        df[col].value_counts().plot(kind='bar', ax=ax, color='skyblue')
+        ax.set_title(f"Frequency of {col}")
+        ax.set_ylabel("Count")
         st.pyplot(fig)
-        st.write(f"💡 **Insight**: The most common `{cat_col}` is **{freq.index[0]}** with **{freq.values[0]}** occurrences.")
-    else:
-        st.write("No categorical columns found for frequency chart.")
+        st.write(f"💡 **Insight**: Most common value in `{col}` is `{df[col].mode()[0]}`")
 
-    st.subheader("📈 Cross Table / Pivot Analysis")
-    if len(cat_cols) >= 2:
-        col1 = st.selectbox("Select row column for cross table", cat_cols, key="cross1")
-        col2 = st.selectbox("Select column column for cross table", cat_cols, key="cross2")
-        pivot_table = pd.crosstab(df[col1], df[col2], margins=True)
-        st.dataframe(pivot_table.reset_index())  # fix pyarrow serialization
-        st.write("💡 **Insight**: The cross table helps identify joint distributions between the two categorical columns.")
+    # Trends for numeric columns over date if date column exists
+    date_cols = [c for c in df.columns if 'date' in c.lower()]
+    if date_cols:
+        st.subheader("📈 Trends Over Time")
+        date_col = date_cols[0]  # pick first date column
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        df = df.dropna(subset=[date_col])
+        df_sorted = df.sort_values(by=date_col)
 
-    st.subheader("🧪 Grouped Statistics")
-    if cat_cols:
-        group_col = st.selectbox("Select a column to group by:", cat_cols, key="group_col")
-        numeric_cols = df[non_id_columns].select_dtypes(include=['float64', 'int64']).columns.tolist()
-        if numeric_cols:
-            group_stats = df.groupby(group_col)[numeric_cols].mean()
-            st.dataframe(group_stats)
-            st.write(f"💡 **Insight**: Group-level means highlight how `{group_col}` affects numerical columns.")
-        else:
-            st.write("No numeric columns for grouped statistics.")
-    else:
-        st.write("No categorical columns for grouped statistics.")
+        for col in numeric_cols:
+            fig, ax = plt.subplots()
+            ax.plot(df_sorted[date_col], df_sorted[col], marker='o', linestyle='-', color='teal')
+            ax.set_title(f"{col} over time ({date_col})")
+            ax.set_ylabel(col)
+            ax.set_xlabel(date_col)
+            st.pyplot(fig)
+            st.write(f"💡 **Insight**: Trend analysis for `{col}` can highlight seasonality or growth patterns.")
 
-    st.subheader("📊 Additional Cross-Tab Analysis")
-    if len(cat_cols) >= 3:
-        col3 = st.selectbox("Optional: Select a third column to add to cross tab", cat_cols, key="cross3")
-        pivot_3d = pd.crosstab([df[col1], df[col3]], df[col2], margins=True)
-        pivot_3d_reset = pivot_3d.reset_index()  # fix pyarrow serialization
-        st.dataframe(pivot_3d_reset)
-        st.write("💡 **Insight**: Adding a third column reveals more nuanced subgroup patterns.")
+    # Cross-tab analysis
+    st.subheader("🔗 Cross-Tab Analysis")
+    if len(cat_cols_cleaned) >= 2:
+        col1 = st.selectbox("Select first categorical column", cat_cols_cleaned, key="cross1")
+        col2 = st.selectbox("Select second categorical column", cat_cols_cleaned, key="cross2")
+        pivot = pd.crosstab(df[col1], df[col2], margins=True)
+        st.dataframe(pivot)
+        st.write("💡 **Insight**: Explore relationships between categories.")
 
-    st.subheader("📈 Scatter Plot for Numeric Analysis")
-    if len(num_cols) >= 2:
-        x_col = st.selectbox("X-axis column", num_cols, key="scatter_x")
-        y_col = st.selectbox("Y-axis column", num_cols, key="scatter_y")
+        # 3D Cross-Tab (no duplicate columns error!)
+        if len(cat_cols_cleaned) >= 3:
+            col3 = st.selectbox("Optional: Select a third column to add to cross tab", cat_cols_cleaned, key="cross3")
+            pivot_3d = pd.crosstab([df[col1], df[col3]], df[col2], margins=True)
+            pivot_3d_reset = pivot_3d.reset_index()
+            pivot_3d_reset = pivot_3d_reset.loc[:, ~pivot_3d_reset.columns.duplicated()]  # remove duplicate columns
+            st.dataframe(pivot_3d_reset)
+            st.write("💡 **Insight**: Adding a third column reveals more nuanced subgroup patterns.")
+
+    # Correlation heatmap
+    st.subheader("🔥 Correlation Heatmap for Numeric Columns")
+    if len(numeric_cols) >= 2:
+        corr = df[numeric_cols].corr()
         fig, ax = plt.subplots()
-        sns.scatterplot(x=x_col, y=y_col, data=df, ax=ax)
+        sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
+        ax.set_title("Correlation Heatmap")
         st.pyplot(fig)
-        corr_value = df[[x_col, y_col]].corr().iloc[0, 1]
-        st.write(f"💡 **Insight**: Correlation between `{x_col}` and `{y_col}`: **{corr_value:.2f}**")
+        st.write("💡 **Insight**: Correlations help detect dependencies among numeric features.")
 
-    st.subheader("💡 AI-Powered Summary Insights")
-    st.write(f"- Rows: **{df.shape[0]}**, Columns: **{df.shape[1]}**")
-    st.write(f"- Most common categorical column: **{df[cat_cols].nunique().idxmin()}**")
-    st.write(f"- Missing values (Top 3): {df.isnull().sum().sort_values(ascending=False).head(3).to_dict()}")
-    st.write("🔍 *Want even deeper AI-generated summaries? Let me know!*")
+    st.success("✅ Analysis complete! Explore the insights above.")
 
 else:
-    st.write("⬆️ Upload a CSV to begin!")
+    st.info("👆 Upload a file to get started.")
