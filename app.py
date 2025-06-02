@@ -1,118 +1,102 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-# --- App config and custom branding ---
-st.set_page_config(page_title="🧙 Data Sage - Insight Wizard", layout="wide")
+# App configuration
+st.set_page_config(page_title="Data Sage Enhanced", layout="wide")
+st.title("🚀 Data Sage Enhanced: Interactive Dashboard & Insights")
 
-st.markdown("""
-    <div style='background-color: #4A90E2; padding: 10px; border-radius: 10px; text-align: center; color: white;'>
-        <h2>🔮 Data Sage: Insight Wizard</h2>
-        <p>Powered by your brand</p>
-    </div>
-""", unsafe_allow_html=True)
-
-st.write("👋 **Welcome!** Upload your data file below and let the magic begin:")
-
-# --- File uploader ---
-uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader("📁 Upload your CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-    # --- Read data ---
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    # Load data
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading the file: {e}")
+        st.stop()
 
-    st.subheader("📄 Raw Data Preview")
+    st.write("✅ Data preview:")
     st.dataframe(df.head())
 
-    # --- Column classifications ---
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
+    # Identify columns
+    numeric_cols = df.select_dtypes(include='number').columns.tolist()
+    cat_cols = df.select_dtypes(include='object').columns.tolist()
+    date_cols = df.select_dtypes(include='datetime').columns.tolist()
 
-    # Remove typical unique ID columns
-    cat_cols_cleaned = [c for c in cat_cols if not c.lower() in ['id', 'unique_id']]
+    # Fallback for date columns (try to parse manually)
+    if not date_cols:
+        for col in df.columns:
+            try:
+                df[col] = pd.to_datetime(df[col], errors='raise')
+                date_cols.append(col)
+                break
+            except:
+                continue
 
-    # --- Summary Statistics ---
-    st.subheader("🔍 Summary Statistics")
-    st.dataframe(df.describe(include='all').T)
+    # --- KPIs ---
+    st.subheader("📊 Key Performance Indicators (KPIs)")
+    if numeric_cols:
+        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1.metric(
+            label=f"🔢 Total `{numeric_cols[0]}`",
+            value=f"{df[numeric_cols[0]].sum():,.0f}"
+        )
+        kpi2.metric(
+            label=f"📈 Average `{numeric_cols[0]}`",
+            value=f"{df[numeric_cols[0]].mean():,.2f}"
+        )
+        kpi3.metric(
+            label=f"🚀 Max `{numeric_cols[0]}`",
+            value=f"{df[numeric_cols[0]].max():,.0f}"
+        )
 
-    # --- Frequency charts ---
-    st.subheader("🔢 Frequency Charts")
-    freq_cols = st.multiselect("Select categorical columns to visualize", cat_cols_cleaned, default=cat_cols_cleaned[:2])
-    col1, col2 = st.columns(2)
-    for idx, col in enumerate(freq_cols):
-        fig = px.histogram(df, x=col, color=col, title=f"Frequency of {col}")
-        if idx % 2 == 0:
-            col1.plotly_chart(fig, use_container_width=True)
-        else:
-            col2.plotly_chart(fig, use_container_width=True)
-
-    # --- Date-based trends ---
-    date_cols = [c for c in df.columns if 'date' in c.lower()]
-    if date_cols:
-        st.subheader("📈 Trend Analysis Over Time")
+    if date_cols and numeric_cols:
         date_col = date_cols[0]
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-        df = df.dropna(subset=[date_col])
-        df_sorted = df.sort_values(by=date_col)
+        df['Month'] = df[date_col].dt.to_period('M')
+        month_summary = df.groupby('Month')[numeric_cols[0]].sum().reset_index()
+        top_month = month_summary.iloc[month_summary[numeric_cols[0]].idxmax()]
+        st.info(f"🌟 **Best Month:** {top_month['Month']} with total {numeric_cols[0]} of {top_month[numeric_cols[0]]:,.0f}")
 
-        num_trend_col = st.selectbox("Select a numeric column for trend plot", numeric_cols)
-        fig_trend = px.line(df_sorted, x=date_col, y=num_trend_col, title=f"{num_trend_col} over time")
-        st.plotly_chart(fig_trend, use_container_width=True)
-        st.info(f"💡 **Insight**: Notice any peaks or patterns for `{num_trend_col}` over time?")
+    if cat_cols:
+        top_cat = df[cat_cols[0]].mode()[0]
+        count_top_cat = df[cat_cols[0]].value_counts().iloc[0]
+        st.success(f"🏆 **Top Category in `{cat_cols[0]}`:** {top_cat} ({count_top_cat} occurrences)")
 
-    # --- Correlation heatmap ---
-    st.subheader("💡 Correlation Heatmap")
-    if len(numeric_cols) >= 2:
+    # --- Interactive Charts ---
+    st.header("📈 Interactive Data Visualizations")
+
+    # Trend over time
+    if date_cols and numeric_cols:
+        st.subheader("📅 Trend Over Time")
+        trend_chart = px.line(df, x=date_cols[0], y=numeric_cols[0], title=f"{numeric_cols[0]} Over Time")
+        st.plotly_chart(trend_chart, use_container_width=True)
+
+    # Category breakdown
+    if cat_cols and numeric_cols:
+        st.subheader("📊 Category Breakdown")
+        cat_chart = px.bar(df, x=cat_cols[0], y=numeric_cols[0], color=cat_cols[0],
+                           title=f"{numeric_cols[0]} by {cat_cols[0]}", height=500)
+        st.plotly_chart(cat_chart, use_container_width=True)
+
+    # Correlation heatmap
+    if len(numeric_cols) > 1:
+        st.subheader("🔗 Correlation Heatmap")
         corr = df[numeric_cols].corr()
-        fig_corr = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu_r', title="Numeric Feature Correlations")
-        st.plotly_chart(fig_corr, use_container_width=True)
+        corr_chart = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="Viridis")
+        st.plotly_chart(corr_chart, use_container_width=True)
 
-    # --- Cross-tab Analysis ---
-    st.subheader("🔗 Cross-Tab Analysis")
-    if len(cat_cols_cleaned) >= 2:
-        cross1 = st.selectbox("Select first categorical column", cat_cols_cleaned, key="cross1")
-        cross2 = st.selectbox("Select second categorical column", cat_cols_cleaned, key="cross2")
-        pivot = pd.crosstab(df[cross1], df[cross2], margins=True)
-        st.dataframe(pivot)
+    # Pie chart for category distribution
+    if cat_cols:
+        st.subheader("🥧 Category Distribution")
+        pie_chart = px.pie(df, names=cat_cols[0], title=f"Distribution of {cat_cols[0]}")
+        st.plotly_chart(pie_chart, use_container_width=True)
 
-        # Optional third dimension
-        if len(cat_cols_cleaned) >= 3:
-            cross3 = st.selectbox("Optional: Select third categorical column", cat_cols_cleaned, key="cross3")
-            pivot_3d = pd.crosstab([df[cross1], df[cross3]], df[cross2], margins=True)
-            pivot_3d_reset = pivot_3d.reset_index()
-            pivot_3d_reset = pivot_3d_reset.loc[:, ~pivot_3d_reset.columns.duplicated()]
-            st.dataframe(pivot_3d_reset)
-
-    # --- Auto-generated insights ---
-    st.subheader("✨ Key Insights Summary")
-    insights = []
-    if not df.empty:
-        insights.append(f"- **Total rows**: {len(df)}")
-        insights.append(f"- **Most common `{freq_cols[0]}`**: {df[freq_cols[0]].mode()[0]}")
-        if date_cols:
-            insights.append(f"- **Date range**: {df[date_col].min().date()} to {df[date_col].max().date()}")
-        if len(numeric_cols) >= 2:
-            top_corr = corr.abs().unstack().sort_values(ascending=False)
-            top_corr = top_corr[top_corr < 1].reset_index().iloc[0]
-            insights.append(f"- **Highest numeric correlation**: `{top_corr['level_0']}` vs `{top_corr['level_1']}` ({top_corr[0]:.2f})")
-    for insight in insights:
-        st.write(insight)
-
-    st.success("🚀 Analysis complete! Let us know how we can customize further insights for your business.")
+    st.write("✅ Analysis complete. Explore the insights interactively above!")
 
 else:
-    st.info("👆 Upload your data to explore insights and trends.")
-
-# --- Footer ---
-st.markdown("""
-    <hr>
-    <p style='text-align: center; font-size: small; color: gray;'>
-        🚀 Made uniquely for your project by Data Sage
-    </p>
-""", unsafe_allow_html=True)
+    st.info("⬆️ Upload a file to start the analysis.")
