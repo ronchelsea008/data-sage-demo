@@ -1,102 +1,120 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
-# App configuration
-st.set_page_config(page_title="Data Sage Enhanced", layout="wide")
-st.title("🚀 Data Sage Enhanced: Interactive Dashboard & Insights")
+st.set_page_config(page_title="Data Sage Enhanced Dashboard", layout="wide")
 
-uploaded_file = st.file_uploader("📁 Upload your CSV or Excel file", type=["csv", "xlsx"])
+st.title("🦉 Data Sage: Enhanced Dashboard")
+st.write(
+    "Upload your CSV or Excel file to generate automatic, interactive insights and KPIs."
+)
+
+uploaded_file = st.file_uploader(
+    "Upload a CSV or Excel file", type=["csv", "xlsx"]
+)
 
 if uploaded_file is not None:
-    # Load data
     try:
-        if uploaded_file.name.endswith('.csv'):
+        if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
     except Exception as e:
-        st.error(f"Error reading the file: {e}")
+        st.error(f"Error reading file: {e}")
         st.stop()
 
-    st.write("✅ Data preview:")
-    st.dataframe(df.head())
+    # Clean & preprocess
+    df = df.dropna(axis=1, how="all")  # drop completely empty columns
 
-    # Identify columns
-    numeric_cols = df.select_dtypes(include='number').columns.tolist()
-    cat_cols = df.select_dtypes(include='object').columns.tolist()
-    date_cols = df.select_dtypes(include='datetime').columns.tolist()
-
-    # Fallback for date columns (try to parse manually)
-    if not date_cols:
-        for col in df.columns:
+    # Attempt to parse any date columns
+    for col in df.columns:
+        if "date" in col.lower() or "time" in col.lower():
             try:
-                df[col] = pd.to_datetime(df[col], errors='raise')
-                date_cols.append(col)
-                break
+                df[col] = pd.to_datetime(df[col])
             except:
-                continue
+                pass
 
-    # --- KPIs ---
+    st.success("✅ File successfully loaded and preprocessed!")
+    st.subheader("📝 Data Preview")
+    st.dataframe(df)
+
+    # Dynamic KPIs (example: total rows, unique columns, etc.)
     st.subheader("📊 Key Performance Indicators (KPIs)")
+    kpi1, kpi2, kpi3 = st.columns(3)
+    kpi1.metric("Total Rows", df.shape[0])
+    kpi2.metric("Total Columns", df.shape[1])
+    kpi3.metric(
+        "Missing Values (%)",
+        f"{(df.isnull().sum().sum() / df.size * 100):.2f}%"
+    )
+
+    # Additional numeric KPIs if numeric columns exist
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
     if numeric_cols:
-        kpi1, kpi2, kpi3 = st.columns(3)
-        kpi1.metric(
-            label=f"🔢 Total `{numeric_cols[0]}`",
-            value=f"{df[numeric_cols[0]].sum():,.0f}"
+        kpi4, kpi5 = st.columns(2)
+        kpi4.metric("Total Sum", f"{df[numeric_cols].sum().sum():,.2f}")
+        kpi5.metric("Mean Value", f"{df[numeric_cols].mean().mean():,.2f}")
+
+    # Trend analysis (by date column if available)
+    date_cols = df.select_dtypes(include=["datetime64", "datetime64[ns]"]).columns.tolist()
+    if date_cols:
+        date_col = st.selectbox("Select date column for time trends", date_cols)
+        numeric_col = st.selectbox("Select numeric column to trend", numeric_cols)
+
+        if date_col and numeric_col:
+            df_grouped = df.groupby(date_col)[numeric_col].sum().reset_index()
+            fig_trend = px.line(
+                df_grouped,
+                x=date_col,
+                y=numeric_col,
+                title=f"Trend of {numeric_col} over time",
+                markers=True
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+    # Dynamic Bar Chart: User-selected categorical vs numeric
+    categorical_cols = df.select_dtypes(include="object").columns.tolist()
+    if categorical_cols and numeric_cols:
+        st.subheader("📊 Interactive Bar Chart")
+        cat_col = st.selectbox("Select categorical column", categorical_cols)
+        num_col = st.selectbox("Select numeric column for bar chart", numeric_cols)
+
+        bar_df = (
+            df.groupby(cat_col)[num_col]
+            .sum()
+            .sort_values(ascending=False)
+            .reset_index()
         )
-        kpi2.metric(
-            label=f"📈 Average `{numeric_cols[0]}`",
-            value=f"{df[numeric_cols[0]].mean():,.2f}"
+        fig_bar = px.bar(
+            bar_df,
+            x=cat_col,
+            y=num_col,
+            color=cat_col,
+            title=f"{num_col} by {cat_col}",
+            text_auto=True,
         )
-        kpi3.metric(
-            label=f"🚀 Max `{numeric_cols[0]}`",
-            value=f"{df[numeric_cols[0]].max():,.0f}"
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Pie chart (optional)
+    if categorical_cols:
+        st.subheader("🥧 Pie Chart for a Categorical Column")
+        pie_col = st.selectbox("Select categorical column for pie chart", categorical_cols)
+        pie_data = df[pie_col].value_counts().reset_index()
+        pie_data.columns = [pie_col, "count"]
+        fig_pie = px.pie(
+            pie_data,
+            names=pie_col,
+            values="count",
+            title=f"Distribution of {pie_col}",
+            hole=0.4
         )
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-    if date_cols and numeric_cols:
-        date_col = date_cols[0]
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-        df['Month'] = df[date_col].dt.to_period('M')
-        month_summary = df.groupby('Month')[numeric_cols[0]].sum().reset_index()
-        top_month = month_summary.iloc[month_summary[numeric_cols[0]].idxmax()]
-        st.info(f"🌟 **Best Month:** {top_month['Month']} with total {numeric_cols[0]} of {top_month[numeric_cols[0]]:,.0f}")
-
-    if cat_cols:
-        top_cat = df[cat_cols[0]].mode()[0]
-        count_top_cat = df[cat_cols[0]].value_counts().iloc[0]
-        st.success(f"🏆 **Top Category in `{cat_cols[0]}`:** {top_cat} ({count_top_cat} occurrences)")
-
-    # --- Interactive Charts ---
-    st.header("📈 Interactive Data Visualizations")
-
-    # Trend over time
-    if date_cols and numeric_cols:
-        st.subheader("📅 Trend Over Time")
-        trend_chart = px.line(df, x=date_cols[0], y=numeric_cols[0], title=f"{numeric_cols[0]} Over Time")
-        st.plotly_chart(trend_chart, use_container_width=True)
-
-    # Category breakdown
-    if cat_cols and numeric_cols:
-        st.subheader("📊 Category Breakdown")
-        cat_chart = px.bar(df, x=cat_cols[0], y=numeric_cols[0], color=cat_cols[0],
-                           title=f"{numeric_cols[0]} by {cat_cols[0]}", height=500)
-        st.plotly_chart(cat_chart, use_container_width=True)
-
-    # Correlation heatmap
-    if len(numeric_cols) > 1:
-        st.subheader("🔗 Correlation Heatmap")
-        corr = df[numeric_cols].corr()
-        corr_chart = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="Viridis")
-        st.plotly_chart(corr_chart, use_container_width=True)
-
-    # Pie chart for category distribution
-    if cat_cols:
-        st.subheader("🥧 Category Distribution")
-        pie_chart = px.pie(df, names=cat_cols[0], title=f"Distribution of {cat_cols[0]}")
-        st.plotly_chart(pie_chart, use_container_width=True)
-
-    st.write("✅ Analysis complete. Explore the insights interactively above!")
-
+    st.success("✨ Dashboard generated with automatic insights!")
+    st.caption(
+        "This enhanced analysis avoids static tables and focuses on interactive exploration. "
+        "Feel free to export or customize further!"
+    )
 else:
-    st.info("⬆️ Upload a file to start the analysis.")
+    st.warning("⚠️ Please upload a file to start your analysis.")
