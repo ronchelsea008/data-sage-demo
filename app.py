@@ -1,21 +1,11 @@
 import streamlit as st
-
-st.title("Data Sage Demo")
-st.write("Upload your CSV file to generate AI-powered insights!")
-
-uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
-
-if uploaded_file is not None:
-    import pandas as pd
-    df = pd.read_csv(uploaded_file)
-    st.write("Data preview:", df.head())
-    st.write("Basic statistics:", df.describe())
-import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# 🟢 Page config should be the first Streamlit command
 st.set_page_config(page_title="Data Sage Enhanced", layout="wide")
+
 st.title("📊 Data Sage Enhanced Demo")
 st.write("Upload your CSV file for AI-powered insights and visualizations.")
 
