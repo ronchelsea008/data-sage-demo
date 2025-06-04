@@ -13,7 +13,7 @@ st.write(
 uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-    try:
+try:
     if uploaded_file.name.endswith(".csv"):
     preview = pd.read_csv(uploaded_file, header=None, nrows=10)
     threshold = preview.shape[1] * 0.5
