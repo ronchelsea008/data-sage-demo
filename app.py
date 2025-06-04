@@ -27,6 +27,15 @@ if uploaded_file is not None:
     df = df.dropna(axis=1, how="all")    # remove all-blank columns
     df = df.dropna(axis=0, how="all")    # remove all-blank rows
 
+    # 🔍 Skip metadata/overview rows at the top
+    threshold = len(df.columns) * 0.5
+    first_valid_row = df.apply(lambda row: row.count(), axis=1).gt(threshold).idxmax()
+    df = df.loc[first_valid_row:].reset_index(drop=True)
+
+    # Retry cleaning just in case
+    df = df.dropna(axis=0, how="all")
+    df.columns = df.columns.str.strip()
+
     # Attempt to parse date columns
     for col in df.columns:
         if "date" in col.lower() or "time" in col.lower():
