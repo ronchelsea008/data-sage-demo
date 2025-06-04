@@ -13,34 +13,26 @@ st.write(
 uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-try:
-    if uploaded_file.name.endswith(".csv"):
-    preview = pd.read_csv(uploaded_file, header=None, nrows=10)
-    threshold = preview.shape[1] * 0.5
-    probable_header_row = preview.apply(lambda row: row.count(), axis=1).gt(threshold).idxmax()
-    df = pd.read_csv(uploaded_file, header=probable_header_row)
-else:
-    preview = pd.read_excel(uploaded_file, header=None, nrows=10)
-    threshold = preview.shape[1] * 0.5
-    probable_header_row = preview.apply(lambda row: row.count(), axis=1).gt(threshold).idxmax()
-    df = pd.read_excel(uploaded_file, header=probable_header_row)
+    try:
+        # Step 1: Detect actual header row
+        if uploaded_file.name.endswith(".csv"):
+            preview = pd.read_csv(uploaded_file, header=None, nrows=10)
+            threshold = preview.shape[1] * 0.5
+            probable_header_row = preview.apply(lambda row: row.count(), axis=1).gt(threshold).idxmax()
+            df = pd.read_csv(uploaded_file, header=probable_header_row)
+        else:
+            preview = pd.read_excel(uploaded_file, header=None, nrows=10)
+            threshold = preview.shape[1] * 0.5
+            probable_header_row = preview.apply(lambda row: row.count(), axis=1).gt(threshold).idxmax()
+            df = pd.read_excel(uploaded_file, header=probable_header_row)
     except Exception as e:
         st.error(f"Error reading file: {e}")
         st.stop()
 
     # 🧹 CLEANING
-    df.columns = df.columns.str.strip()  # remove whitespace from column names
-    df = df.dropna(axis=1, how="all")    # remove all-blank columns
-    df = df.dropna(axis=0, how="all")    # remove all-blank rows
-
-    # 🔍 Skip metadata/overview rows at the top
-    threshold = len(df.columns) * 0.5
-    first_valid_row = df.apply(lambda row: row.count(), axis=1).gt(threshold).idxmax()
-    df = df.loc[first_valid_row:].reset_index(drop=True)
-
-    # Retry cleaning just in case
-    df = df.dropna(axis=0, how="all")
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.str.strip()  # Remove whitespace from column names
+    df = df.dropna(axis=1, how="all")    # Remove all-blank columns
+    df = df.dropna(axis=0, how="all")    # Remove all-blank rows
 
     # Attempt to parse date columns
     for col in df.columns:
