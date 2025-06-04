@@ -113,6 +113,66 @@ if uploaded_file is not None:
         )
         st.plotly_chart(fig_heatmap, use_container_width=True)
 
+    # Column Aggregator with Group By
+    st.subheader("🧮 Column Aggregator with Group By")
+
+    with st.expander("Aggregate numerical and categorical columns by group"):
+        group_by_col = st.selectbox(
+            "Select a column to group by (usually categorical)",
+            categorical_cols,
+            key="groupby_col"
+        )
+
+        st.markdown("### ➕ Numeric Columns to Aggregate")
+        selected_num_cols = st.multiselect(
+            "Choose numeric columns",
+            numeric_cols,
+            key="agg_numeric"
+        )
+
+        num_agg_func = st.selectbox(
+            "Select aggregation function for numeric columns",
+            ["sum", "count"],
+            key="agg_func_numeric"
+        )
+
+        st.markdown("### 🔤 Categorical Columns for Frequency Count")
+        selected_cat_cols = st.multiselect(
+            "Choose categorical columns to count values (not grouped)",
+            categorical_cols,
+            key="agg_categorical"
+        )
+
+        if st.button("Run Aggregation with Group By", key="run_agg"):
+            agg_results = {}
+
+            # Grouped numeric aggregation
+            if group_by_col and selected_num_cols:
+                grouped_df = (
+                    df.groupby(group_by_col)[selected_num_cols]
+                    .agg(num_agg_func)
+                    .reset_index()
+                )
+                agg_results["Grouped Numeric Aggregation"] = grouped_df
+
+            # Categorical frequency counts (independent of group-by)
+            if selected_cat_cols:
+                cat_counts = {}
+                for col in selected_cat_cols:
+                    cat_counts[col] = df[col].value_counts().to_frame(name="Count")
+                agg_results["Categorical Counts"] = cat_counts
+
+            # Show Results
+            st.markdown("### 📊 Aggregation Results")
+            for label, result in agg_results.items():
+                st.write(f"**{label}**")
+                if isinstance(result, dict):
+                    for col_name, freq_df in result.items():
+                        st.write(f"**{col_name}**")
+                        st.dataframe(freq_df)
+                else:
+                    st.dataframe(result)
+
     st.caption(
         "All visualizations are dynamic and multi-dimensional for a true dashboard experience. Enjoy exploring!"
     )
