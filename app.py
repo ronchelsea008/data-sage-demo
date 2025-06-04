@@ -1,4 +1,4 @@
-import streamlit as st
+     import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
@@ -22,9 +22,11 @@ if uploaded_file is not None:
         st.error(f"Error reading file: {e}")
         st.stop()
 
-    # Basic cleaning
-    df = df.dropna(axis=1, how="all")
-    
+    # 🧹 CLEANING
+    df.columns = df.columns.str.strip()  # remove whitespace from column names
+    df = df.dropna(axis=1, how="all")    # remove all-blank columns
+    df = df.dropna(axis=0, how="all")    # remove all-blank rows
+
     # Attempt to parse date columns
     for col in df.columns:
         if "date" in col.lower() or "time" in col.lower():
@@ -33,7 +35,7 @@ if uploaded_file is not None:
             except:
                 pass
 
-    st.success("✅ File loaded!")
+    st.success("✅ File loaded and cleaned!")
 
     # KPIs
     st.subheader("📊 Key Metrics")
